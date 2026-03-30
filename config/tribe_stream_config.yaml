@@ -1,0 +1,118 @@
+# ===================================================================
+# TRIBE v2 Streaming Simulation Stack — Configuration
+# ===================================================================
+
+model:
+  # HuggingFace repo ID or local path to checkpoint
+  checkpoint: "facebook/tribev2"
+  checkpoint_name: "best.ckpt"
+  # "cuda" for GPU, "cpu" for CPU-only, "auto" to detect
+  device: "auto"
+  # Feature cache directory (extracted features stored here)
+  cache_folder: "./cache"
+
+  quantization:
+    # TurboQuant KV cache compression (3 or 4 bits)
+    turboquant_bits: 4
+    turboquant_qjl: true
+    # Use fp16 for feature extractors
+    fp16_extractors: true
+    # Use torch.compile for the FmriEncoder
+    compile_encoder: true
+    # Use bitsandbytes 8-bit (requires bitsandbytes package)
+    bnb_8bit: false
+
+# -------------------------------------------------------------------
+# Streaming Engine
+# -------------------------------------------------------------------
+streaming:
+  # Sliding window duration in seconds
+  # Should match TRIBE v2's duration_trs (default 40 TRs at ~1s each)
+  window_sec: 40.0
+  # Prediction stride — how often to produce a brain state
+  stride_sec: 1.0
+  # Maximum acceptable end-to-end latency (warning threshold)
+  max_latency_ms: 500
+  # Warmup time before first prediction
+  warmup_sec: 5.0
+
+# -------------------------------------------------------------------
+# Ingestors
+# -------------------------------------------------------------------
+ingestors:
+  video:
+    # "webcam" for live capture, or path to a video file
+    source: "webcam"
+    fps: 30
+    # Temporary storage for video chunks
+    temp_dir: "./cache/video_frames"
+
+  audio:
+    # "mic" for live capture, or path to an audio file
+    source: "mic"
+    sample_rate: 16000
+    temp_dir: "./cache/audio_chunks"
+
+  text:
+    # "asr" for Whisper-based live transcription, or path to .txt file
+    source: "asr"
+    # Whisper model for ASR (only used when source="asr")
+    asr_model: "openai/whisper-small"
+    # Words per second when reading from file
+    words_per_second: 3.0
+
+# -------------------------------------------------------------------
+# OSC Transport
+# -------------------------------------------------------------------
+osc:
+  # Unity brain visualization target
+  unity_ip: "127.0.0.1"
+  unity_port: 9000
+
+  # SuperCollider sonification target
+  sc_ip: "127.0.0.1"
+  sc_port: 57120
+
+  # Pure Data sonification target (alternative to SC)
+  pd_ip: "127.0.0.1"
+  pd_port: 9001
+
+  # Maximum floats per OSC message (UDP-safe chunking)
+  chunk_size: 5000
+
+  # Heartbeat rate (Hz) for keep-alive messages
+  heartbeat_hz: 10.0
+
+  # Whether to send full 20k vertex data (vs. only ROI/PCA)
+  send_full_vertices: true
+
+  # Which targets to enable: "unity", "sc", "pd"
+  enabled_targets:
+    - "unity"
+    - "sc"
+
+# -------------------------------------------------------------------
+# Post-processing
+# -------------------------------------------------------------------
+visualization:
+  # Atlas for ROI parcellation: "destrieux" or "fallback"
+  roi_atlas: "destrieux"
+  # Number of PCA components for sonification
+  pca_components: 8
+  # PCA warmup (how many brain states to collect before fitting PCA)
+  pca_warmup_states: 30
+  # Colormap for vertex visualization: "hot", "viridis", "coolwarm"
+  colormap: "hot"
+  # Activation range for normalization
+  activation_min: -3.0
+  activation_max: 3.0
+
+# -------------------------------------------------------------------
+# Logging
+# -------------------------------------------------------------------
+logging:
+  level: "INFO"
+  # Log file (null for stdout only)
+  file: null
+  # Print brain state summary every N steps
+  summary_interval: 10
