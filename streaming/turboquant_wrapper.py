@@ -228,8 +228,9 @@ class QJLCorrection:
 class TurboQuantWrapper:
     """Apply TurboQuant KV cache compression to TRIBE v2 transformers.
 
-    This wraps the model and patches attention layers to use compressed
-    KV caches, reducing memory by ~6× with near-zero accuracy loss.
+    NOTE (WIP): Currently this is primarily a memory estimator. It wraps
+    the model but does not yet perform in-place KV modification for the
+    decoder.
 
     Parameters
     ----------

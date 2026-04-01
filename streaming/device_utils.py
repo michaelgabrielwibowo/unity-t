@@ -45,6 +45,7 @@ def resolve_device(requested: str = "auto") -> torch.device:
     if req == "dml":
         device = _try_directml()
         if device is not None:
+            logger.warning("DirectML (DML) support is experimental and may crash upstream in neuralset!")
             return device
         logger.warning("DirectML unavailable — falling back to CPU")
         return torch.device("cpu")
@@ -59,6 +60,7 @@ def resolve_device(requested: str = "auto") -> torch.device:
 
     if req == "mps":
         if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            logger.warning("Apple MPS support is experimental and may crash upstream in neuralset!")
             logger.info("Using Apple MPS")
             return torch.device("mps")
         logger.warning("MPS requested but not available — falling back to CPU")

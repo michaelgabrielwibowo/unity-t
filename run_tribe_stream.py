@@ -37,6 +37,10 @@ from pathlib import Path
 
 import yaml
 
+# Ensure stdout can print Unicode characters safely (e.g. arrows) on Windows
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 # Ensure project root is on path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -166,8 +170,8 @@ def main():
 
     except Exception as exc:
         logger.error("Failed to load TRIBE v2 model: %s", exc)
-        logger.info("Continuing with mock model for testing...")
-        model = None
+        logger.error("Ensure 'tribev2' package is installed or exists in the repository root. Exiting.")
+        sys.exit(1)
 
     # ---------------------------------------------------------------
     # 3. Apply TurboQuant Optimization
@@ -176,31 +180,21 @@ def main():
 
     if model is not None and model._model is not None:
         from streaming.quantization import QuantizationManager
-        from streaming.turboquant_wrapper import TurboQuantWrapper
         from streaming.cpu_optimization import apply_turboquant
         
         qm = QuantizationManager(target_vram_gb=12.0)
 
-        # Apply TurboQuant to the FmriEncoder
+        # Apply Dynamic Quantization to the FmriEncoder on CPU
         if quant_config.get("turboquant_bits") or quant_config.get("turboquant", False):
             try:
                 if str(device.type) in ("cpu", "privateuseone"):
                     stats = apply_turboquant(model._model)
-                    logger.info("TurboQuant: %d attention layers quantized (%.1f MB saved)", 
+                    logger.info("Dynamic Quantization: %d attention layers quantized (%.1f MB saved)", 
                         stats.get("layers_patched", 0), stats.get("savings_mb", 0.0))
                 else:
-                    tq = TurboQuantWrapper(
-                        model._model,
-                        bits=quant_config.get("turboquant_bits", 4),
-                        enable_qjl=quant_config.get("turboquant_qjl", True),
-                    )
-                    savings = tq.estimate_memory_savings()
-                    logger.info(
-                        "TurboQuant registered on GPU: estimated %.1f MB saved",
-                        savings.get("savings_mb", 0.0),
-                    )
+                    logger.info("GPU TurboQuant is currently an experimental WIP, skipping CPU dynamic quant.")
             except Exception as exc:
-                logger.warning("TurboQuant failed: %s", exc)
+                logger.warning("Dynamic Quantization failed: %s", exc)
 
         # Apply fp16 + torch.compile
         if quant_config.get("fp16_extractors", True):
@@ -223,14 +217,7 @@ def main():
             model=model,
             window_sec=stream_config.get("window_sec", 40.0),
             stride_sec=stream_config.get("stride_sec", 1.0),
-            device=device,
-        )
-    else:
-        # Mock engine for testing without model weights
-        engine = TribeStreamEngine(
-            model=None,
-            window_sec=stream_config.get("window_sec", 40.0),
-            stride_sec=stream_config.get("stride_sec", 1.0),
+            max_latency_ms=stream_config.get("max_latency_ms", 1000.0),
             device=device,
         )
 
@@ -245,12 +232,18 @@ def main():
         source=video_source,
         fps=video_cfg.get("fps", 30),
     )
+
+    import queue
+    asr_q = queue.Queue(maxsize=10) if text_source == "asr" else None
+
     engine.add_audio_ingestor(
         source=audio_source,
         sample_rate=audio_cfg.get("sample_rate", 16000),
+        audio_queue=asr_q,
     )
     engine.add_text_ingestor(
         source=text_source,
+        audio_queue=asr_q,
     )
 
     logger.info("Ingestors configured: video=%s, audio=%s, text=%s",

@@ -118,6 +118,7 @@ def apply_turboquant(model: torch.nn.Module, verbose: bool = True) -> dict:
             patched, savings_mb, stats["ratio"],
         )
     return stats
+def patch_extractors_for_cpu(model_wrapper):
     """Replaces huge default extractors (600M+ params) with standard lightweight alternatives (~80M)."""
     from neuralset.extractors.audio import HuggingFaceAudio
     from neuralset.extractors.video import HuggingFaceVideo

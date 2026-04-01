@@ -6,9 +6,9 @@ only *new* time slices are processed each step.  Previously extracted
 features are cached in a ring buffer and concatenated to form the full
 context window on demand.
 
-This is the key to real-time performance: re‐extracting 40 s of features
-every second would be infeasible, but extracting only the latest 1 s
-chunk costs ~50–100 ms on a modern GPU.
+Note: This is an experimental scaffolding intended to reduce real-time
+overhead. It is currently not wired into the main inference loop, which
+still relies on batch processing.
 """
 
 from __future__ import annotations

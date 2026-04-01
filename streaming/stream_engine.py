@@ -176,12 +176,15 @@ class TribeStreamEngine:
         model: Any,  # TribeModel
         window_sec: float = 40.0,
         stride_sec: float = 1.0,
+        max_latency_ms: float = 1000.0,
         device: str = "cuda",
     ):
         self.model = model
         self.window_sec = window_sec
         self.stride_sec = stride_sec
+        self.max_latency_ms = max_latency_ms
         self.device = device
+        self.start_time_ref = time.time()
 
         # Event accumulation
         self.accumulator = EventAccumulator(max_duration_sec=window_sec * 3)
@@ -211,7 +214,7 @@ class TribeStreamEngine:
     ) -> VideoIngestor:
         ing = VideoIngestor(
             self.accumulator, source=source, fps=fps,
-            start_time_ref=time.time(), **kwargs
+            start_time_ref=self.start_time_ref, **kwargs
         )
         self._ingestors.append(ing)
         return ing
@@ -221,7 +224,7 @@ class TribeStreamEngine:
     ) -> AudioIngestor:
         ing = AudioIngestor(
             self.accumulator, source=source, sample_rate=sample_rate,
-            start_time_ref=time.time(), **kwargs
+            start_time_ref=self.start_time_ref, **kwargs
         )
         self._ingestors.append(ing)
         return ing
@@ -231,10 +234,11 @@ class TribeStreamEngine:
     ) -> TextIngestor:
         ing = TextIngestor(
             self.accumulator, source=source,
-            start_time_ref=time.time(), **kwargs
+            start_time_ref=self.start_time_ref, **kwargs
         )
         self._ingestors.append(ing)
         return ing
+
 
     # -------------------------------------------------------------------
     # Core inference loop
@@ -296,7 +300,8 @@ class TribeStreamEngine:
                     break
 
                 # Trim old events
-                trim_before = time.time() - self.window_sec * 2
+                now_elapsed = time.time() - self.start_time_ref
+                trim_before = now_elapsed - self.window_sec * 2
                 self.accumulator.trim(trim_before)
 
                 # Pace to stride interval
@@ -331,8 +336,9 @@ class TribeStreamEngine:
         """
         t_start = time.time()
 
-        # Gather events for the current window
-        events_df = self.accumulator.get_all()
+        # Gather events for the current window strictly
+        now_elapsed = time.time() - self.start_time_ref
+        events_df = self.accumulator.get_window(now_elapsed - self.window_sec, now_elapsed)
         if events_df.empty or len(events_df) < 2:
             logger.debug("Not enough events yet (%d), skipping", len(events_df))
             return None
@@ -374,6 +380,13 @@ class TribeStreamEngine:
         pca_components = self._pca_projector.update_and_project(vertices)
 
         latency_ms = (time.time() - t_start) * 1000
+
+        if latency_ms > self.max_latency_ms:
+            logger.warning(
+                "Inference latency (%.0fms) exceeded budget (%.0fms). "
+                "System falling behind real-time constraints.",
+                latency_ms, self.max_latency_ms
+            )
 
         return BrainState(
             timestamp=time.time(),

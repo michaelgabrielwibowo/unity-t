@@ -9,7 +9,7 @@ Modules
 -------
 brain_state      – Canonical BrainState output dataclass
 osc_config       – OSC transport configuration
-feature_cache    – Incremental feature extraction with ring-buffer caching
+feature_cache    – (Experimental) Incremental feature extraction (scaffold)
 ingestors        – Video / Audio / Text stream ingestors
 stream_engine    – Core TribeStreamEngine orchestrator
 osc_publisher    – Multi-address OSC publisher

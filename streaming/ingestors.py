@@ -266,6 +266,7 @@ class AudioIngestor(BaseIngestor):
         source: str = "mic",
         sample_rate: int = 16000,
         temp_dir: str = "./cache/audio_chunks",
+        audio_queue: Optional[queue.Queue] = None,
         **kwargs,
     ):
         super().__init__(accumulator, name="audio-ingestor", **kwargs)
@@ -273,6 +274,7 @@ class AudioIngestor(BaseIngestor):
         self.sample_rate = sample_rate
         self.temp_dir = Path(temp_dir)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
+        self.audio_queue = audio_queue
 
     def _run_loop(self) -> None:
         if self.source == "mic":
@@ -324,6 +326,8 @@ class AudioIngestor(BaseIngestor):
                 "split": "all",
             }
             self.accumulator.append(event)
+            if self.audio_queue is not None and not self.audio_queue.full():
+                self.audio_queue.put(chunk_path)
             self._frames_ingested += 1
             chunk_idx += 1
 
@@ -378,6 +382,8 @@ class AudioIngestor(BaseIngestor):
                 "split": "all",
             }
             self.accumulator.append(event)
+            if self.audio_queue is not None and not self.audio_queue.full():
+                self.audio_queue.put(chunk_path)
             self._frames_ingested += 1
             chunk_idx += 1
             time.sleep(1.0)  # Real-time pacing
@@ -434,6 +440,9 @@ class TextIngestor(BaseIngestor):
         3. Emit Word events to the accumulator
         """
         logger.info("[text/asr] ASR mode — requires Whisper integration")
+        if self.audio_queue is None:
+            logger.error("[text/asr] audio_queue is None! ASR disabled.")
+            return
 
         try:
             import whisper

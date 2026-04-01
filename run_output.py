@@ -36,6 +36,10 @@ import sys
 import time
 from pathlib import Path
 
+# Ensure stdout can print Unicode characters safely (e.g. arrows) on Windows
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 import numpy as np
 import torch
 
@@ -187,8 +191,9 @@ def main():
     log.info("Model loaded in %.1fs", load_time)
 
     # Patch heavily for CPU environments
-    patch_extractors_for_cpu(model_wrapper)
-    patch_projectors(model_wrapper._model)
+    if str(device) == "cpu" or str(device) == "privateuseone":
+        patch_extractors_for_cpu(model_wrapper)
+        patch_projectors(model_wrapper._model)
 
     # -----------------------------------------------------------
     # 2. Apply TurboQuant
