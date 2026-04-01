@@ -1,0 +1,11 @@
+cache_all_layers: false
+cache_n_layers: 20
+event_types: Audio
+frequency: 2.0
+infra.version: release
+layer_type: transformer
+model_name: facebook/w2v-bert-2.0
+name: Wav2VecBert
+norm_audio: true
+normalized: true
+token_aggregation: mean

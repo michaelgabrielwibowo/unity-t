@@ -1,0 +1,4 @@
+cache_n_layers: 20
+frequency: 2.0
+infra.version: release
+name: Wav2VecBert

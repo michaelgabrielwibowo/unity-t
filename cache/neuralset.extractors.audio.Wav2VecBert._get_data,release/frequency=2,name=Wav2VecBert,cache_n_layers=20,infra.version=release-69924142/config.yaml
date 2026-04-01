@@ -1,0 +1,45 @@
+aggregation: sum
+allow_missing: true
+cache_all_layers: false
+cache_n_layers: 20
+device: cuda
+event_types: Audio
+frequency: 2.0
+infra:
+  cluster: null
+  conda_env: null
+  cpus_per_task: 10
+  folder: ./cache
+  forbid_single_item_computation: false
+  gpus_per_node: 1
+  job_name: null
+  keep_in_ram: true
+  logs: '{folder}/logs/{user}/%j'
+  max_jobs: 256
+  max_pickle_size_gb: null
+  mem_gb: null
+  min_samples_per_job: 1
+  mode: cached
+  nodes: 1
+  permissions: 511
+  slurm_account: null
+  slurm_additional_parameters: null
+  slurm_constraint: volta32gb
+  slurm_partition: scavenge
+  slurm_qos: null
+  slurm_use_srun: false
+  tasks_per_node: 1
+  timeout_min: 720
+  version: release
+  workdir: null
+layer_aggregation: group_mean
+layer_type: transformer
+layers:
+- 0.5
+- 0.75
+- 1.0
+model_name: facebook/w2v-bert-2.0
+name: Wav2VecBert
+norm_audio: true
+normalized: true
+token_aggregation: mean

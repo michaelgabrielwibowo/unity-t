@@ -20,7 +20,14 @@ def apply_fp16(model: nn.Module) -> nn.Module:
     """Convert model to fp16 for inference.
 
     Keeps batch norm and layer norm in fp32 for numerical stability.
+    Skips fp16 conversion if the model is on CPU because standard PyTorch
+    CPU backend does not support float16 matrix multiplications natively.
     """
+    first_param = next(model.parameters(), None)
+    if first_param is not None and first_param.device.type in ("cpu", "privateuseone"):
+        logger.info("Skipping fp16 conversion: unsupported natively on CPU/DML.")
+        return model
+
     for module in model.modules():
         if isinstance(module, (nn.BatchNorm1d, nn.BatchNorm2d, nn.LayerNorm)):
             module.float()

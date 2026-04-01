@@ -23,6 +23,9 @@ Usage
 
     # CPU-only mode
     python run_tribe_stream.py --device cpu
+
+    # iGPU / DirectML mode (Intel/AMD integrated graphics)
+    python run_tribe_stream.py --device dml
 """
 
 from __future__ import annotations
@@ -36,6 +39,15 @@ import yaml
 
 # Ensure project root is on path
 sys.path.insert(0, str(Path(__file__).parent))
+
+from streaming.device_utils import device_info, resolve_device  # noqa: E402
+from streaming.cpu_optimization import (
+    patch_cuda_for_cpu,
+    patch_extractors_for_cpu,
+    patch_projectors
+)
+
+patch_cuda_for_cpu()
 
 logger = logging.getLogger("tribe_stream")
 
@@ -103,8 +115,11 @@ def main():
     ingestor_config = config.get("ingestors", {})
     osc_config_dict = config.get("osc", {})
 
-    # Apply CLI overrides
-    device = args.device or model_config.get("device", "auto")
+    # Apply CLI overrides then resolve to actual torch.device
+    device_str = args.device or model_config.get("device", "auto")
+    device = resolve_device(device_str)
+    dev_info = device_info(device)
+
     video_source = args.video or ingestor_config.get("video", {}).get("source", "webcam")
     audio_source = args.audio or ingestor_config.get("audio", {}).get("source", "mic")
     text_source = args.text or ingestor_config.get("text", {}).get("source", "asr")
@@ -112,7 +127,7 @@ def main():
     logger.info("=" * 60)
     logger.info("  TRIBE v2 Streaming Brain Simulation")
     logger.info("=" * 60)
-    logger.info("  Device:  %s", device)
+    logger.info("  Device:  %s (%s)", dev_info.get('name', device), dev_info.get('device'))
     logger.info("  Video:   %s", video_source)
     logger.info("  Audio:   %s", audio_source)
     logger.info("  Text:    %s", text_source)
@@ -140,9 +155,14 @@ def main():
         model = TribeModel.from_pretrained(
             checkpoint,
             cache_folder=cache_folder,
-            device=device,
+            device=str(device),
         )
         logger.info("Model loaded successfully")
+        
+        # Apply CPU optimizations to avoid 8-Billion param wait time and OOMs
+        if str(device.type) == "cpu" or str(device.type) == "privateuseone":
+            patch_extractors_for_cpu(model)
+            patch_projectors(model._model)
 
     except Exception as exc:
         logger.error("Failed to load TRIBE v2 model: %s", exc)
@@ -157,24 +177,28 @@ def main():
     if model is not None and model._model is not None:
         from streaming.quantization import QuantizationManager
         from streaming.turboquant_wrapper import TurboQuantWrapper
-
+        from streaming.cpu_optimization import apply_turboquant
+        
         qm = QuantizationManager(target_vram_gb=12.0)
 
         # Apply TurboQuant to the FmriEncoder
-        if quant_config.get("turboquant_bits"):
+        if quant_config.get("turboquant_bits") or quant_config.get("turboquant", False):
             try:
-                tq = TurboQuantWrapper(
-                    model._model,
-                    bits=quant_config["turboquant_bits"],
-                    enable_qjl=quant_config.get("turboquant_qjl", True),
-                )
-                savings = tq.estimate_memory_savings()
-                logger.info(
-                    "TurboQuant: %d layers patched, %.1f MB saved (%.1f× ratio)",
-                    savings["layers_patched"],
-                    savings["savings_mb"],
-                    savings["ratio"],
-                )
+                if str(device.type) in ("cpu", "privateuseone"):
+                    stats = apply_turboquant(model._model)
+                    logger.info("TurboQuant: %d attention layers quantized (%.1f MB saved)", 
+                        stats.get("layers_patched", 0), stats.get("savings_mb", 0.0))
+                else:
+                    tq = TurboQuantWrapper(
+                        model._model,
+                        bits=quant_config.get("turboquant_bits", 4),
+                        enable_qjl=quant_config.get("turboquant_qjl", True),
+                    )
+                    savings = tq.estimate_memory_savings()
+                    logger.info(
+                        "TurboQuant registered on GPU: estimated %.1f MB saved",
+                        savings.get("savings_mb", 0.0),
+                    )
             except Exception as exc:
                 logger.warning("TurboQuant failed: %s", exc)
 
@@ -199,15 +223,15 @@ def main():
             model=model,
             window_sec=stream_config.get("window_sec", 40.0),
             stride_sec=stream_config.get("stride_sec", 1.0),
-            device=device if device != "auto" else "cuda",
+            device=device,
         )
     else:
-        # Mock engine for testing without GPU/model
+        # Mock engine for testing without model weights
         engine = TribeStreamEngine(
             model=None,
             window_sec=stream_config.get("window_sec", 40.0),
             stride_sec=stream_config.get("stride_sec", 1.0),
-            device="cpu",
+            device=device,
         )
 
     # ---------------------------------------------------------------

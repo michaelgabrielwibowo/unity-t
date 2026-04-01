@@ -3,23 +3,18 @@
 # ===================================================================
 
 model:
-  # HuggingFace repo ID or local path to checkpoint
   checkpoint: "facebook/tribev2"
   checkpoint_name: "best.ckpt"
-  # "cuda" for GPU, "cpu" for CPU-only, "auto" to detect
-  device: "auto"
-  # Feature cache directory (extracted features stored here)
+  # "cuda" for NVIDIA, "dml" for iGPU via DirectML, "cpu" for CPU-only
+  device: "dml"
   cache_folder: "./cache"
 
   quantization:
-    # TurboQuant KV cache compression (3 or 4 bits)
     turboquant_bits: 4
     turboquant_qjl: true
-    # Use fp16 for feature extractors
-    fp16_extractors: true
-    # Use torch.compile for the FmriEncoder
-    compile_encoder: true
-    # Use bitsandbytes 8-bit (requires bitsandbytes package)
+    # DirectML does not support fp16 autocast — keep False for iGPU
+    fp16_extractors: false
+    compile_encoder: false
     bnb_8bit: false
 
 # -------------------------------------------------------------------
